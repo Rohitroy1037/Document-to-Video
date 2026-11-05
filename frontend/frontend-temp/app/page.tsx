@@ -21,7 +21,7 @@ import {
 import dynamic from "next/dynamic";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import DocumentChat from "./DocumentChat";
-import { API_URL } from "./api-url";
+import { API_URL } from "@/lib/api";
 
 
 
@@ -124,9 +124,7 @@ async function apiRequest(
   } catch {
 
     throw new Error(
-
-      "Backend is not responding. Start FastAPI at http://127.0.0.1:8000."
-
+      `Backend is not responding. Start FastAPI at ${API_URL}.`
     );
 
   }

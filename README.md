@@ -302,7 +302,7 @@ npm run build
 
 - Start the backend from the `backend` directory and confirm `http://127.0.0.1:8000/health` returns successfully.
 - Keep the backend terminal open; errors are reported there.
-- The frontend currently calls `http://127.0.0.1:8000` directly. Its backend CORS configuration allows local origins `localhost:3000` and `127.0.0.1:3000`.
+- The frontend defaults to `http://127.0.0.1:8000`. Set `NEXT_PUBLIC_API_URL` in the frontend environment to use a different backend URL. The backend CORS configuration allows local origins `localhost:3000` and `127.0.0.1:3000`.
 
 ### Missing `GROQ_API_KEY` or Groq errors
 
