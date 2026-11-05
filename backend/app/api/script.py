@@ -1,8 +1,9 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pathlib import Path
 import json
 
 from app.services.script_generator import generate_script
+from app.utils.rate_limit import rate_limit
 
 
 router = APIRouter()
@@ -13,7 +14,10 @@ SCRIPT_DIR = Path("storage/scripts")
 SCRIPT_DIR.mkdir(parents=True, exist_ok=True)
 
 
-@router.post("/script/{document_id}")
+@router.post(
+    "/script/{document_id}",
+    dependencies=[Depends(rate_limit("generation", 30))],
+)
 async def generate_document_script(document_id: str):
 
     analysis_path = ANALYSIS_DIR / f"{document_id}.json"

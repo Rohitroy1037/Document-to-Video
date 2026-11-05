@@ -21,6 +21,7 @@ import {
 import dynamic from "next/dynamic";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import DocumentChat from "./DocumentChat";
+import { API_URL } from "./api-url";
 
 
 
@@ -39,10 +40,6 @@ const PdfViewer = dynamic(() => import("./PdfViewer"), {
   ),
 
 });
-
-
-
-const API_URL = "http://127.0.0.1:8000";
 
 
 

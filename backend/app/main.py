@@ -1,4 +1,5 @@
 
+import os
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -23,13 +24,23 @@ app = FastAPI(
 )
 
 
-# Allow requests from the local Next.js frontend
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
+configured_origins = os.getenv("FRONTEND_ORIGINS")
+allowed_origins = (
+    [
+        origin.strip().rstrip("/")
+        for origin in configured_origins.split(",")
+        if origin.strip()
+    ]
+    if configured_origins
+    else [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
-    ],
+    ]
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

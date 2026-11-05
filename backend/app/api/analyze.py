@@ -1,8 +1,9 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pathlib import Path
 import json
 
 from app.services.ai_analyzer import analyze_document
+from app.utils.rate_limit import rate_limit
 
 
 router = APIRouter()
@@ -13,7 +14,10 @@ ANALYSIS_DIR = Path("storage/analyses")
 ANALYSIS_DIR.mkdir(parents=True, exist_ok=True)
 
 
-@router.post("/analyze/{document_id}")
+@router.post(
+    "/analyze/{document_id}",
+    dependencies=[Depends(rate_limit("generation", 30))],
+)
 async def analyze(document_id: str):
 
     document_path = DOCUMENT_DIR / f"{document_id}.json"

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pathlib import Path
 import json
 
@@ -7,6 +7,7 @@ from app.services.audio_plan import (
     create_audio_plan,
     synchronize_scene_plan
 )
+from app.utils.rate_limit import rate_limit
 
 
 router = APIRouter()
@@ -22,7 +23,10 @@ AUDIO_DIR.mkdir(
 )
 
 
-@router.post("/audio/{document_id}/{language}")
+@router.post(
+    "/audio/{document_id}/{language}",
+    dependencies=[Depends(rate_limit("generation", 30))],
+)
 async def create_audio(
     document_id: str,
     language: str

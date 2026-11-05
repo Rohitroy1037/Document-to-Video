@@ -1,9 +1,10 @@
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pathlib import Path
 import json
 
 from app.services.scene_planner import create_scene_plan
+from app.utils.rate_limit import rate_limit
 
 
 router = APIRouter()
@@ -18,7 +19,10 @@ SCENE_DIR.mkdir(
 )
 
 
-@router.post("/scenes/{document_id}/{language}")
+@router.post(
+    "/scenes/{document_id}/{language}",
+    dependencies=[Depends(rate_limit("generation", 30))],
+)
 async def create_scenes(
     document_id: str,
     language: str

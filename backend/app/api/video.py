@@ -1,10 +1,11 @@
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pathlib import Path
 import json
 
 from app.services.video_renderer import render_video
 from app.services.subtitle_generator import create_subtitle_file
+from app.utils.rate_limit import rate_limit
 
 
 router = APIRouter()
@@ -21,7 +22,10 @@ for directory in [VIDEO_DIR, SUBTITLE_DIR]:
     directory.mkdir(parents=True, exist_ok=True)
 
 
-@router.post("/video/{document_id}/{language}")
+@router.post(
+    "/video/{document_id}/{language}",
+    dependencies=[Depends(rate_limit("generation", 30))],
+)
 async def create_video(document_id: str, language: str):
 
     language = language.lower()

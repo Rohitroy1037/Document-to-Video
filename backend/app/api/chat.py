@@ -1,14 +1,18 @@
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.schemas.chat import DocumentChatRequest
 from app.services.document_chat import answer_document_question
+from app.utils.rate_limit import rate_limit
 
 router = APIRouter()
 
 
-@router.post("/chat/{document_id}")
+@router.post(
+    "/chat/{document_id}",
+    dependencies=[Depends(rate_limit("chat", 60))],
+)
 def chat_with_document(
     document_id: UUID,
     request: DocumentChatRequest,

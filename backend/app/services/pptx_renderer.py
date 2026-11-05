@@ -1,10 +1,14 @@
 import subprocess
+import os
+import shutil
 from pathlib import Path
 import fitz
 
 
 LIBREOFFICE_PATH = (
-    r"C:\Program Files\LibreOffice\program\soffice.exe"
+    os.getenv("LIBREOFFICE_PATH")
+    or shutil.which("soffice")
+    or r"C:\Program Files\LibreOffice\program\soffice.exe"
 )
 
 

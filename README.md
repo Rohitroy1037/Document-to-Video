@@ -9,6 +9,7 @@ Document to Video AI turns a PDF or PowerPoint presentation into a narrated vide
 - [Architecture](#architecture)
 - [Requirements](#requirements)
 - [Run locally on Windows](#run-locally-on-windows)
+- [Deploy to Vercel and Render](#deploy-to-vercel-and-render)
 - [Use the application](#use-the-application)
 - [Document chat and RAG](#document-chat-and-rag)
 - [HTTP API](#http-api)
@@ -129,6 +130,50 @@ npm run dev
 Open `http://localhost:3000`. Keep both development servers running while using the app.
 
 To make a production frontend build, run `npm run build` in `frontend\frontend-temp`. To serve that build locally, use `npm run start` from the same directory.
+
+## Deploy to Vercel and Render
+
+The frontend is a Next.js app and deploys to Vercel. The FastAPI backend uses FFmpeg, LibreOffice, and local generated files, so it deploys as a Docker web service on Render. The repository includes `render.yaml` and `backend/Dockerfile` for the backend deployment.
+
+### 1. Deploy the frontend to Vercel
+
+1. Sign in to [Vercel](https://vercel.com/) and import this GitHub repository.
+2. Set **Root Directory** to `frontend/frontend-temp`. Vercel should detect Next.js automatically.
+3. Keep the default install and build commands (`npm install`/`npm ci` and `npm run build`).
+4. Deploy the frontend. Its first deployment can use the local API fallback; API requests will work after you set the Render URL in step 3.
+5. Copy the production domain Vercel assigns, for example `https://your-project.vercel.app`.
+
+### 2. Deploy the backend to Render
+
+1. Sign in to [Render](https://render.com/) and create a **Blueprint** from this GitHub repository. Render reads `render.yaml` from the repository root.
+2. Confirm the service named `document-to-video-api` uses the Docker runtime, `backend` as its root directory, and the Free plan.
+3. When prompted, set these environment variables:
+   - `GROQ_API_KEY`: your Groq API key. Enter it in the Render dashboard only; never commit it to GitHub.
+   - `FRONTEND_ORIGINS`: your exact Vercel origin, such as `https://your-project.vercel.app` (no path or trailing slash). Add any additional frontend origins as a comma-separated list.
+4. Create the Blueprint and wait for the Docker build and service deploy to complete.
+5. Confirm the backend health endpoint responds with JSON at `https://your-render-service.onrender.com/health`.
+
+The Docker image installs FFmpeg and LibreOffice and runs the API on Render's assigned port. The backend uses `FRONTEND_ORIGINS` for browser CORS; if it is unset during local development, the two local Next.js origins are allowed.
+
+### 3. Connect Vercel to the deployed backend
+
+After Render gives you the backend URL:
+
+1. Open the Vercel project's **Settings → Environment Variables**.
+2. Add `NEXT_PUBLIC_API_URL` with the full Render service origin, such as `https://your-render-service.onrender.com` (no trailing slash). This is a public URL, not a secret.
+3. Apply it to the **Production** environment and redeploy the frontend so the URL is included in the Next.js build.
+4. Open the Vercel site, upload a small text-based PDF, and verify chat/video requests reach the Render service.
+
+The frontend reads `NEXT_PUBLIC_API_URL` at build time. Updating the variable without creating a new Vercel deployment does not change the already-built JavaScript.
+
+### Free-tier behavior and public demo limits
+
+- Render Free web services sleep after 15 minutes without traffic. The first request after sleep can take about a minute while the service starts.
+- Render Free has an ephemeral filesystem and no persistent disks. Uploaded documents, intermediate pipeline files, the downloaded chat model, chat indexes, subtitles, and videos can be erased whenever the service sleeps, restarts, or redeploys. This deployment is for demos; files are not durable.
+- The embedding model downloads on the first chat request after the service starts. Video rendering and embedding can be resource-intensive; if the service runs out of memory or requests time out, move the backend to a paid Render instance or use external object storage and a suitable compute plan.
+- There is no user login. The backend applies shared, in-memory limits of 20 uploads per hour, 30 generation-stage requests per hour, and 60 chat requests per hour across all visitors on that running instance. These limits reset when the service restarts and are not an authentication system or a guaranteed billing cap.
+- Configure usage alerts or spending limits for your Groq account. Do not upload sensitive or confidential documents to a public demo.
+- Vercel preview deployments use different origins. If you want them to call Render, add their exact origin to `FRONTEND_ORIGINS` and redeploy the backend.
 
 ## Use the application
 
@@ -290,15 +335,15 @@ npm run build
 
 ## Current limitations
 
-- The app is configured for local development; the frontend API URL and backend CORS origins are local addresses, not production deployment settings.
+- The frontend API URL and backend CORS origins are configurable for deployment, but each hosted platform still needs its environment variables set as described above.
 - Narration-style and visual-style dropdowns are not yet connected to backend behavior.
 - PDF support extracts selectable text; OCR for image-only/scanned PDFs is not implemented.
 - Chat indexes only extracted text and returns a maximum of four retrieved passages as citations per answer.
-- PPTX slide rendering depends on the current Windows-specific LibreOffice path.
+- PPTX slide rendering requires LibreOffice. The Windows app uses its default Windows install path; the Render Docker image includes LibreOffice on Linux.
 - Generated assets are stored on the local filesystem and are not currently exposed through user accounts or cloud persistence.
 
 ## Privacy and external services
 
-Uploaded files and generated assets are stored locally under `backend\storage` and are excluded from this repository. For AI generation, the backend sends document-derived content to Groq for analysis, script generation, translation, scene planning, and chat answers. Voice synthesis uses Edge TTS and requires network access. Chat embeddings and retrieval run locally, but the question and retrieved passages are sent to Groq to produce the answer.
+Uploaded files and generated assets are stored under `backend\storage` and are excluded from this repository. On Render Free, this directory is ephemeral and files are lost when the service sleeps, restarts, or redeploys. For AI generation, the backend sends document-derived content to Groq for analysis, script generation, translation, scene planning, and chat answers. Voice synthesis uses Edge TTS and requires network access. Chat embeddings and retrieval run locally, but the question and retrieved passages are sent to Groq to produce the answer.
 
-Review the privacy, retention, and usage terms of external services before using sensitive documents. Never commit API keys, `.env` files, uploaded documents, or generated media.
+Review the privacy, retention, and usage terms of external services before using sensitive documents. The public demo does not have user accounts; do not upload sensitive files. Never commit API keys, `.env` files, uploaded documents, or generated media.

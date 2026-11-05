@@ -1,5 +1,5 @@
 
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from pathlib import Path
 import uuid
 import json
@@ -14,10 +14,12 @@ from app.services.document_normalizer import (
 
 from app.services.page_renderer import render_pdf_pages
 from app.services.pptx_renderer import render_pptx_slides
+from app.utils.rate_limit import rate_limit
 
 
 router = APIRouter()
 
+MAX_UPLOAD_SIZE = 50 * 1024 * 1024
 UPLOAD_DIR = Path("storage/uploads")
 DOCUMENT_DIR = Path("storage/documents")
 PAGE_DIR = Path("storage/pages")
@@ -27,7 +29,10 @@ DOCUMENT_DIR.mkdir(parents=True, exist_ok=True)
 PAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 
-@router.post("/upload")
+@router.post(
+    "/upload",
+    dependencies=[Depends(rate_limit("upload", 20))],
+)
 async def upload_document(file: UploadFile = File(...)):
 
     filename = file.filename
@@ -53,7 +58,13 @@ async def upload_document(file: UploadFile = File(...)):
     file_path = UPLOAD_DIR / f"{document_id}{extension}"
 
     try:
-        content = await file.read()
+        content = await file.read(MAX_UPLOAD_SIZE + 1)
+
+        if len(content) > MAX_UPLOAD_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail="Uploaded file exceeds the 50 MB limit."
+            )
 
         if not content:
             raise HTTPException(

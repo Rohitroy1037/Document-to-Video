@@ -1,8 +1,9 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pathlib import Path
 import json
 
 from app.services.language_adapter import adapt_script_language
+from app.utils.rate_limit import rate_limit
 
 
 router = APIRouter()
@@ -13,7 +14,10 @@ TRANSLATION_DIR = Path("storage/translations")
 TRANSLATION_DIR.mkdir(parents=True, exist_ok=True)
 
 
-@router.post("/translate/{document_id}/{language}")
+@router.post(
+    "/translate/{document_id}/{language}",
+    dependencies=[Depends(rate_limit("generation", 30))],
+)
 async def translate_script(document_id: str, language: str):
 
     script_path = SCRIPT_DIR / f"{document_id}.json"
