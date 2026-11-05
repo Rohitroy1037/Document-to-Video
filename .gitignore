@@ -1,0 +1,28 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+backend/venv/
+
+# Node.js and Next.js
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# Generated documents, embeddings, audio, subtitles, and videos
+/storage/
+/backend/storage/
+
+# Build and editor output
+build/
+dist/
+coverage/
+.DS_Store
+*.log

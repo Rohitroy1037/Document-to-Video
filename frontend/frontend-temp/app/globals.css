@@ -1,0 +1,133 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f3f2ec;
+  --foreground: #202a26;
+  --surface: #fffefa;
+  --line: #dedfd6;
+  --muted: #68716d;
+  --accent: #31574b;
+  --accent-hover: #25473c;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.studio-shell {
+  color: var(--foreground);
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(216, 224, 206, 0.38), transparent 34rem),
+    var(--background);
+}
+
+.studio-shell h2 {
+  font-family: Georgia, "Times New Roman", serif;
+  letter-spacing: -0.045em;
+}
+
+.studio-card {
+  border-color: var(--line) !important;
+  border-radius: 1.15rem !important;
+  background-color: var(--surface) !important;
+  box-shadow: 0 2px 8px rgba(32, 42, 38, 0.035);
+}
+
+.studio-shell [class*="border-white/"] {
+  border-color: var(--line) !important;
+}
+
+.studio-shell [class*="bg-[#11111b]"],
+.studio-shell [class*="bg-[#191925]"],
+.studio-shell [class*="bg-[#09090f]"] {
+  background-color: var(--surface) !important;
+}
+
+.studio-shell [class*="bg-white/[0.02]"],
+.studio-shell [class*="bg-white/[0.03]"],
+.studio-shell [class*="bg-white/5"] {
+  background-color: #f5f5ef !important;
+}
+
+.studio-shell [class*="text-gray-200"],
+.studio-shell [class*="text-gray-300"] {
+  color: #26332e !important;
+}
+
+.studio-shell [class*="text-gray-400"],
+.studio-shell [class*="text-gray-500"] {
+  color: var(--muted) !important;
+}
+
+.studio-shell [class*="text-purple-"] {
+  color: var(--accent) !important;
+}
+
+.studio-shell [class*="border-purple-"] {
+  border-color: rgba(49, 87, 75, 0.3) !important;
+}
+
+.studio-shell [class*="bg-purple-"],
+.studio-shell [class*="bg-indigo-"] {
+  background-color: #e7eee8 !important;
+}
+
+.studio-shell [class*="bg-gradient-to-r"] {
+  background-image: none !important;
+  background-color: var(--accent) !important;
+  color: white !important;
+}
+
+.studio-shell [class*="bg-gradient-to-r"]:hover {
+  background-color: var(--accent-hover) !important;
+}
+
+.studio-shell [class*="border-emerald-"] {
+  border-color: #c9ded1 !important;
+}
+
+.studio-shell [class*="bg-emerald-"] {
+  background-color: #e7f1e9 !important;
+}
+
+.studio-shell [class*="text-emerald-"] {
+  color: #3e7357 !important;
+}
+
+.studio-shell select,
+.studio-shell textarea {
+  color: var(--foreground);
+  background-color: var(--surface);
+}
+
+.studio-shell select:focus,
+.studio-shell textarea:focus {
+  border-color: #709080;
+  box-shadow: 0 0 0 3px rgba(49, 87, 75, 0.09);
+}
+
+.studio-shell button:focus-visible,
+.studio-shell a:focus-visible {
+  outline: 3px solid rgba(49, 87, 75, 0.42);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
