@@ -1,368 +1,311 @@
-
-
 import json
-
+import shutil
 import subprocess
+import time
 
 from pathlib import Path
 
 
+# =========================================================
+# VIDEO CONFIGURATION
+# =========================================================
 
-
-
-FPS = 30
+FPS = 24
 
 VIDEO_WIDTH = 1280
-
 VIDEO_HEIGHT = 720
 
+VIDEO_PRESET = "ultrafast"
+VIDEO_CRF = "23"
+
+VIDEO_THREADS = "2"
+
+FFMPEG_TIMEOUT = 1800
 
 
+# =========================================================
+# ANIMATION FILTER
+# =========================================================
 
-
-def get_animation_filter(animation):
+def get_animation_filter(animation, duration):
 
     """
+    Generate an FFmpeg filter for scene animation.
 
-    Create a video filter for the requested scene animation.
-
+    Supported animations:
+        - zoom_in
+        - zoom_out
+        - pan_left
+        - pan_right
+        - static
     """
-
-
 
     animation = str(animation or "static").lower()
 
-
+    total_frames = max(int(float(duration) * FPS), 1)
 
     if animation == "zoom_in":
 
         zoom = "min(zoom+0.0015,1.15)"
 
         x = "iw/2-(iw/zoom/2)"
-
         y = "ih/2-(ih/zoom/2)"
-
-
 
     elif animation == "zoom_out":
 
         zoom = "if(eq(on,0),1.15,max(zoom-0.0015,1.0))"
 
         x = "iw/2-(iw/zoom/2)"
-
         y = "ih/2-(ih/zoom/2)"
-
-
 
     elif animation == "pan_left":
 
         zoom = "1.10"
 
-        x = "max(0,(iw-iw/zoom)*(1-on/900))"
+        x = (
+            f"max(0,(iw-iw/zoom)"
+            f"*(1-on/{total_frames}))"
+        )
 
         y = "ih/2-(ih/zoom/2)"
-
-
 
     elif animation == "pan_right":
 
         zoom = "1.10"
 
-        x = "max(0,(iw-iw/zoom)*on/900)"
+        x = (
+            f"max(0,(iw-iw/zoom)"
+            f"*on/{total_frames})"
+        )
 
         y = "ih/2-(ih/zoom/2)"
-
-
 
     else:
 
         return (
-
             f"scale={VIDEO_WIDTH}:{VIDEO_HEIGHT}:"
-
             "force_original_aspect_ratio=decrease,"
-
             f"pad={VIDEO_WIDTH}:{VIDEO_HEIGHT}:"
-
             "(ow-iw)/2:(oh-ih)/2,"
-
-            "setsar=1,fps=30"
-
+            f"setsar=1,fps={FPS}"
         )
 
-
+    # Extra image area provides room for zoom and pan.
+    animation_width = int(VIDEO_WIDTH * 1.15)
+    animation_height = int(VIDEO_HEIGHT * 1.15)
 
     return (
-
-        "scale=1920:1080:"
-
+        f"scale={animation_width}:{animation_height}:"
         "force_original_aspect_ratio=increase,"
-
-        "crop=1920:1080,"
-
+        f"crop={animation_width}:{animation_height},"
         f"zoompan=z='{zoom}':"
-
         f"x='{x}':"
-
         f"y='{y}':"
-
         "d=1:"
-
-        "s=1280x720:"
-
-        "fps=30,"
-
+        f"s={VIDEO_WIDTH}x{VIDEO_HEIGHT}:"
+        f"fps={FPS},"
         "setsar=1"
-
     )
 
 
+# =========================================================
+# FFMPEG EXECUTION
+# =========================================================
 
+def run_ffmpeg(command, description="FFmpeg task"):
 
-
-def escape_subtitle_path(path):
+    """
+    Execute FFmpeg and report errors.
 
     """
 
-    Escape a path for FFmpeg's subtitles filter on Windows.
-
-    """
-
-
-
-    path = str(Path(path).resolve())
-
-    path = path.replace("\\\\", "/")
-
-    path = path.replace(":", r"**\:**")
-
-    path = path.replace("'", r"**\\'**")
-
-    path = path.replace(",", r"**\\,**")
-
-    path = path.replace("[", r"**\\[**")
-
-    path = path.replace("]", r"**\\]**")
-
-
-
-    return path
-
-
-
-
-
-def run_ffmpeg(command):
-
-    """
-
-    Run FFmpeg and report useful error details.
-
-    """
-
-
+    start_time = time.time()
 
     try:
 
+        print(f"Starting: {description}", flush=True)
+
         subprocess.run(
-
             command,
-
             check=True,
-
             capture_output=True,
-
             text=True,
-
-            timeout=1800
-
+            timeout=FFMPEG_TIMEOUT
         )
 
+        elapsed = time.time() - start_time
 
+        print(
+            f"Completed: {description} "
+            f"in {elapsed:.2f} seconds",
+            flush=True
+        )
 
     except subprocess.CalledProcessError as error:
 
-        details = error.stderr or error.stdout or str(error)
-
-
+        details = (
+            error.stderr
+            or error.stdout
+            or str(error)
+        )
 
         raise RuntimeError(
-
             "FFmpeg rendering failed:\n"
-
             + details[-5000:]
-
         ) from error
-
-
 
     except subprocess.TimeoutExpired as error:
 
         raise RuntimeError(
-
-            "FFmpeg rendering timed out after 30 minutes."
-
+            f"{description} timed out after "
+            f"{FFMPEG_TIMEOUT // 60} minutes."
         ) from error
 
 
-
-
+# =========================================================
+# VIDEO RENDERER
+# =========================================================
 
 def render_video(
-
     scene_plan,
-
     audio_plan,
-
     page_dir,
-
     subtitle_path,
-
     output_path
-
 ):
 
     """
+    Render a final video from:
 
-    Render a video from PDF pages or PPTX slides, scene audio,
+        - PDF pages or PPTX slides
+        - Scene audio
+        - Scene animations
+        - Subtitle SRT file
 
-    scene animations, and optional subtitles.
-
+    The final output is an MP4 video.
     """
 
-
+    overall_start = time.time()
 
     page_dir = Path(page_dir)
 
     output_path = Path(output_path)
 
-
-
-    output_path.parent.mkdir(
-
-        parents=True,
-
-        exist_ok=True
-
+    subtitle_path = (
+        Path(subtitle_path)
+        if subtitle_path
+        else None
     )
 
+    output_path.parent.mkdir(
+        parents=True,
+        exist_ok=True
+    )
 
+    # -----------------------------------------------------
+    # Validate input directories
+    # -----------------------------------------------------
 
     if not page_dir.exists():
 
         raise FileNotFoundError(
-
             f"Visual assets directory not found: {page_dir}"
-
         )
-
-
 
     scenes = scene_plan.get("scenes", [])
 
     audio_scenes = audio_plan.get("scenes", [])
 
-
-
     if not scenes:
 
         raise ValueError(
-
             "Scene plan contains no scenes."
-
         )
-
-
 
     if not audio_scenes:
 
         raise ValueError(
-
             "Audio plan contains no audio scenes."
-
         )
 
-
-
-    # Match audio files to their scene numbers.
+    # -----------------------------------------------------
+    # Match audio with scene numbers
+    # -----------------------------------------------------
 
     audio_by_number = {}
-
-
 
     for audio_scene in audio_scenes:
 
         number = audio_scene.get("scene_number")
 
+        if number is None:
 
+            raise ValueError(
+                "Audio entry is missing scene_number."
+            )
 
-        if number is not None:
+        audio_by_number[int(number)] = audio_scene
 
-            audio_by_number[int(number)] = audio_scene
-
-
+    # -----------------------------------------------------
+    # Validate document type
+    # -----------------------------------------------------
 
     document_type = str(
-
         scene_plan.get("document_type", "pdf")
-
     ).lower()
-
-
 
     if document_type not in {"pdf", "pptx"}:
 
         raise ValueError(
-
             f"Unsupported document type: {document_type}"
-
         )
 
-
-
-    # Keep temporary scene clips separate from final output.
+    # -----------------------------------------------------
+    # Temporary rendering directory
+    # -----------------------------------------------------
 
     temp_dir = output_path.parent / (
-
         output_path.stem + "_render_temp"
-
     )
-
-
 
     temp_dir.mkdir(
-
         parents=True,
-
         exist_ok=True
-
     )
-
-
 
     clip_paths = []
 
+    print("=" * 55, flush=True)
+    print("VIDEO RENDERING STARTED", flush=True)
+    print("Document type:", document_type, flush=True)
+    print("Total scenes:", len(scenes), flush=True)
+    print("FPS:", FPS, flush=True)
+    print("Resolution:", f"{VIDEO_WIDTH}x{VIDEO_HEIGHT}", flush=True)
+    print("Encoding preset:", VIDEO_PRESET, flush=True)
+    print("=" * 55, flush=True)
 
+    # =====================================================
+    # STEP 1: RENDER INDIVIDUAL SCENES
+    # =====================================================
 
     for index, scene in enumerate(scenes, start=1):
 
-
+        scene_start = time.time()
 
         scene_number = int(
-
             scene.get("scene_number", index)
-
         )
 
+        print(
+            f"\nPreparing scene {scene_number}/{len(scenes)}",
+            flush=True
+        )
 
+        # -------------------------------------------------
+        # Determine source visual
+        # -------------------------------------------------
 
         source_page = int(scene["source_page"])
-
-
-
-        # PPTX images use slide_N.png.
-
-        # PDF images use page_N.png.
 
         if document_type == "pptx":
 
@@ -372,99 +315,84 @@ def render_video(
 
             image_filename = f"page_{source_page}.png"
 
-
-
         image_path = page_dir / image_filename
-
-
 
         if not image_path.exists():
 
             raise FileNotFoundError(
-
                 f"Document image not found: {image_path}"
-
             )
 
-
+        # -------------------------------------------------
+        # Find corresponding audio
+        # -------------------------------------------------
 
         if scene_number not in audio_by_number:
 
             raise FileNotFoundError(
-
                 f"Audio entry missing for scene {scene_number}."
-
             )
-
-
 
         audio_scene = audio_by_number[scene_number]
 
+        audio_path = Path(
+            audio_scene["audio_path"]
+        )
 
-
-        audio_path = Path(audio_scene["audio_path"])
-
-
-
-        # Relative paths are resolved from the backend working directory.
-
+        # Resolve relative paths.
         if not audio_path.is_absolute():
 
             audio_path = Path.cwd() / audio_path
 
-
-
         audio_path = audio_path.resolve()
-
-
 
         if not audio_path.exists():
 
             raise FileNotFoundError(
-
                 f"Scene audio file not found: {audio_path}"
-
             )
 
+        # -------------------------------------------------
+        # Determine duration
+        # -------------------------------------------------
 
-
-        # Prefer the actual audio duration from the audio plan.
-
-        duration = float(audio_scene.get("duration", 0))
-
-
+        duration = float(
+            audio_scene.get("duration", 0)
+        )
 
         if duration <= 0:
 
-            duration = float(scene.get("duration", 0))
-
-
+            duration = float(
+                scene.get("duration", 0)
+            )
 
         if duration <= 0:
 
             raise ValueError(
-
                 f"Invalid duration for scene {scene_number}."
-
             )
 
+        # -------------------------------------------------
+        # Animation
+        # -------------------------------------------------
 
-
-        animation = scene.get("animation", "static")
-
-
-
-        video_filter = get_animation_filter(animation)
-
-
-
-        clip_path = temp_dir / (
-
-            f"clip_{scene_number:03d}.mp4"
-
+        animation = scene.get(
+            "animation",
+            "static"
         )
 
+        video_filter = get_animation_filter(
+            animation,
+            duration
+        )
 
+        clip_path = temp_dir / (
+            f"clip_{scene_number:03d}.mp4"
+        )
+
+        # -------------------------------------------------
+        # FFmpeg command
+        # -------------------------------------------------
 
         command = [
 
@@ -475,128 +403,155 @@ def render_video(
             "-hide_banner",
 
             "-loglevel",
-
             "error",
 
-            "-loop", "1",
+            # Input image
+            "-loop",
+            "1",
 
-            "-framerate", str(FPS),
+            "-framerate",
+            str(FPS),
 
-            "-i", str(image_path),
+            "-i",
+            str(image_path),
 
-            "-i", str(audio_path),
+            # Input audio
+            "-i",
+            str(audio_path),
 
-            "-vf", video_filter,
+            # Video filter
+            "-vf",
+            video_filter,
 
-            "-map", "0:v:0",
+            # Stream mapping
+            "-map",
+            "0:v:0",
 
-            "-map", "1:a:0",
+            "-map",
+            "1:a:0",
 
-            "-t", f"{duration:.3f}",
+            # Duration
+            "-t",
+            f"{duration:.3f}",
 
-            "-r", str(FPS),
+            "-r",
+            str(FPS),
 
-            "-c:v", "libx264",
+            # Video encoding
+            "-c:v",
+            "libx264",
 
-            "-preset", "medium",
+            "-preset",
+            VIDEO_PRESET,
 
-            "-crf", "20",
+            "-crf",
+            VIDEO_CRF,
 
-            "-pix_fmt", "yuv420p",
+            "-threads:v",
+            VIDEO_THREADS,
 
-            "-c:a", "aac",
+            "-pix_fmt",
+            "yuv420p",
 
-            "-b:a", "192k",
+            # Audio encoding
+            "-c:a",
+            "aac",
 
-            "-ar", "44100",
+            "-b:a",
+            "128k",
 
-            "-ac", "2",
+            "-ar",
+            "44100",
 
-            "-af", "aresample=async=1",
+            "-ac",
+            "2",
 
+            "-af",
+            "aresample=async=1",
+
+            # Stop when the shorter stream ends.
             "-shortest",
 
-            "-movflags", "+faststart",
+            # MP4 optimization
+            "-movflags",
+            "+faststart",
 
             str(clip_path)
 
         ]
 
-
-
         print(
-
             f"Rendering scene {scene_number}: "
-
-            f"{image_filename}, animation={animation}, "
-
-            f"duration={duration:.2f}s"
-
+            f"{image_filename}, "
+            f"animation={animation}, "
+            f"duration={duration:.2f}s",
+            flush=True
         )
 
+        # Execute FFmpeg.
+        run_ffmpeg(
+            command,
+            description=f"Scene {scene_number}"
+        )
 
+        # -------------------------------------------------
+        # Validate generated clip
+        # -------------------------------------------------
 
-        run_ffmpeg(command)
-
-
-
-        if not clip_path.exists() or clip_path.stat().st_size == 0:
+        if (
+            not clip_path.exists()
+            or clip_path.stat().st_size == 0
+        ):
 
             raise RuntimeError(
-
-                f"Scene {scene_number} produced an empty video clip."
-
+                f"Scene {scene_number} "
+                "produced an empty video clip."
             )
-
-
 
         clip_paths.append(clip_path)
 
+        scene_elapsed = time.time() - scene_start
 
+        print(
+            f"Scene {scene_number} completed. "
+            f"Elapsed: {scene_elapsed:.2f}s",
+            flush=True
+        )
 
-    # Create the FFmpeg concat manifest.
+    # =====================================================
+    # STEP 2: CREATE CONCAT MANIFEST
+    # =====================================================
+
+    print(
+        "\nAll scene clips generated successfully.",
+        flush=True
+    )
 
     concat_file = temp_dir / "concat_list.txt"
 
-
-
     with open(
-
         concat_file,
-
         "w",
-
         encoding="utf-8"
-
     ) as file:
 
         for clip_path in clip_paths:
 
             escaped_path = (
-
                 str(clip_path.resolve())
-
-                .replace("\\\\", "/")
-
-                .replace("'", "'\\\\''")
-
+                .replace("\\", "/")
+                .replace("'", "'\\''")
             )
-
-
 
             file.write(
-
                 f"file '{escaped_path}'\n"
-
             )
 
+    # =====================================================
+    # STEP 3: COMBINE SCENE CLIPS
+    # =====================================================
 
-
-    # Combine all scene clips.
-
-    silent_subtitled_video = temp_dir / "combined.mp4"
-
-
+    combined_video = temp_dir / "combined.mp4"
 
     concat_command = [
 
@@ -607,105 +562,164 @@ def render_video(
         "-hide_banner",
 
         "-loglevel",
-
         "error",
 
-        "-f", "concat",
+        "-f",
+        "concat",
 
-        "-safe", "0",
+        "-safe",
+        "0",
 
-        "-i", str(concat_file),
+        "-i",
+        str(concat_file),
 
-        "-c", "copy",
+        "-c",
+        "copy",
 
-        "-movflags", "+faststart",
+        "-movflags",
+        "+faststart",
 
-        str(silent_subtitled_video)
+        str(combined_video)
 
     ]
 
+    print(
+        "\nCombining all scene clips...",
+        flush=True
+    )
 
+    run_ffmpeg(
+        concat_command,
+        description="Combining scene clips"
+    )
 
-    print("Combining scene clips...")
-
-
-
-    run_ffmpeg(concat_command)
-
-
-
-    # Keep subtitles as a separate SRT file instead of burning them into the MP4.
-    # The frontend converts this SRT file to WebVTT and lets viewers toggle captions.
-    subtitle_path = Path(subtitle_path) if subtitle_path else None
-    if subtitle_path and subtitle_path.exists():
-        print(f"Subtitles saved separately: {subtitle_path}")
-    else:
-        print("Subtitle file not found; final video will have no subtitle track.")
-
-    # Copy the combined scene video without applying any subtitle filter.
-    output_path.write_bytes(silent_subtitled_video.read_bytes())
-
-    if not output_path.exists() or output_path.stat().st_size == 0:
+    if (
+        not combined_video.exists()
+        or combined_video.stat().st_size == 0
+    ):
 
         raise RuntimeError(
-
-            "Final video was not generated successfully."
-
+            "Combined video file is empty."
         )
 
+    # =====================================================
+    # STEP 4: KEEP SUBTITLES AS SEPARATE SRT
+    # =====================================================
 
+    if subtitle_path and subtitle_path.exists():
 
-    # Report the actual output duration using ffprobe.
+        print(
+            f"Subtitles saved separately: {subtitle_path}",
+            flush=True
+        )
+
+    else:
+
+        print(
+            "Subtitle file not found. "
+            "Final video will have no subtitle file.",
+            flush=True
+        )
+
+    # =====================================================
+    # STEP 5: COPY FINAL VIDEO
+    # =====================================================
+
+    shutil.copy2(
+        combined_video,
+        output_path
+    )
+
+    if (
+        not output_path.exists()
+        or output_path.stat().st_size == 0
+    ):
+
+        raise RuntimeError(
+            "Final video was not generated successfully."
+        )
+
+    # =====================================================
+    # STEP 6: VERIFY FINAL VIDEO WITH FFPROBE
+    # =====================================================
 
     probe_command = [
 
         "ffprobe",
 
-        "-v", "error",
+        "-v",
+        "error",
 
-        "-show_entries", "format=duration",
+        "-show_entries",
+        "format=duration",
 
-        "-of", "json",
+        "-of",
+        "json",
 
         str(output_path)
 
     ]
 
-
-
     probe_result = subprocess.run(
-
         probe_command,
-
         check=True,
-
         capture_output=True,
-
         text=True,
-
         timeout=60
-
     )
 
-
-
-    probe_data = json.loads(probe_result.stdout)
-
-
+    probe_data = json.loads(
+        probe_result.stdout
+    )
 
     actual_duration = float(
-
         probe_data["format"]["duration"]
-
     )
 
+    # =====================================================
+    # FINAL STATUS
+    # =====================================================
 
+    total_elapsed = time.time() - overall_start
 
-    print(f"Final video: {output_path}")
+    print("\n" + "=" * 55, flush=True)
 
-    print(f"Final duration: {actual_duration:.2f} seconds")
+    print(
+        "VIDEO RENDERING COMPLETED SUCCESSFULLY",
+        flush=True
+    )
 
+    print(
+        "Final video:",
+        output_path,
+        flush=True
+    )
 
+    print(
+        "Final duration:",
+        f"{actual_duration:.2f} seconds",
+        flush=True
+    )
+
+    print(
+        "Total scenes:",
+        len(clip_paths),
+        flush=True
+    )
+
+    print(
+        "Final video size:",
+        f"{output_path.stat().st_size / (1024 * 1024):.2f} MB",
+        flush=True
+    )
+
+    print(
+        "Total rendering time:",
+        f"{total_elapsed:.2f} seconds",
+        flush=True
+    )
+
+    print("=" * 55, flush=True)
 
     return {
 
@@ -715,6 +729,8 @@ def render_video(
 
         "scene_count": len(clip_paths),
 
-        "document_type": document_type
+        "document_type": document_type,
+
+        "rendering_time": round(total_elapsed, 2)
 
     }
